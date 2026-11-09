@@ -28,7 +28,7 @@ jobs:
             echo "Source already present in repo — skipping ZIP unpack"
           else
             ZIP=""
-            for c in TITAN_PRO_GOV_v2_1_1_NEON_STUDIO.zip TITAN_SOURCE.zip TITAN_PRO_GOV*.zip TITAN_PRO*.zip titan*.zip; do
+            for c in Titan.zip TITAN.zip TITAN_PRO_GOV_v2_1_1_NEON_STUDIO.zip TITAN_SOURCE.zip TITAN_PRO_GOV*.zip TITAN_PRO*.zip titan*.zip; do
               if [ -f "$c" ] && [ "$(wc -c < "$c")" -gt 50000 ]; then ZIP="$c"; break; fi
             done
             if [ -z "$ZIP" ]; then
@@ -37,7 +37,7 @@ jobs:
                 if [ "$(wc -c < "$c")" -gt 50000 ]; then ZIP="$c"; break; fi
               done
             fi
-            test -n "$ZIP" || { echo "No source and no ZIP found"; exit 1; }
+            test -n "$ZIP" || { echo "No source and no ZIP found"; ls -la *.zip 2>/dev/null || true; exit 1; }
             echo "Using ZIP: $ZIP ($(wc -c < "$ZIP") bytes)"
 
             rm -rf /tmp/titan_src
@@ -127,9 +127,31 @@ jobs:
           mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses >/dev/null 2>&1 || true
-          sdkmanager --sdk_root="$ANDROID_HOME" --install \
-            "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125"
+
+          install_pkg() {
+            local pkg="$1"
+            local tries=0
+            while [ $tries -lt 4 ]; do
+              tries=$((tries+1))
+              echo "Installing $pkg (attempt $tries)..."
+              if sdkmanager --sdk_root="$ANDROID_HOME" --install "$pkg"; then
+                echo "OK: $pkg"
+                return 0
+              fi
+              echo "Retry $pkg after failure..."
+              sleep 5
+            done
+            echo "FAILED to install $pkg after 4 attempts"
+            return 1
+          }
+
+          install_pkg "platform-tools"
+          install_pkg "platforms;android-34"
+          install_pkg "build-tools;34.0.0"
+          install_pkg "ndk;26.1.10909125"
+
           echo "sdk.dir=$ANDROID_HOME" > local.properties
+          ls -la "$ANDROID_HOME" || true
 
       - name: Create NEON launcher icons
         run: |
@@ -143,34 +165,45 @@ jobs:
               from PIL import Image, ImageDraw, ImageFilter
 
           def neon_icon(size: int) -> Image.Image:
-              img = Image.new("RGBA", (size, size), (8, 10, 18, 255))
-              draw = ImageDraw.Draw(img)
-              margin = size // 10
+              # Dark deep background
+              img = Image.new("RGBA", (size, size), (6, 8, 16, 255))
+              # Strong outer glow
               glow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
               gdraw = ImageDraw.Draw(glow)
-              gdraw.ellipse([margin, margin, size - margin, size - margin], fill=(0, 240, 255, 90))
-              glow = glow.filter(ImageFilter.GaussianBlur(radius=size // 8))
+              m = size // 12
+              gdraw.ellipse([m, m, size - m, size - m], fill=(0, 255, 255, 110))
+              glow = glow.filter(ImageFilter.GaussianBlur(radius=max(4, size // 6)))
               img = Image.alpha_composite(img, glow)
+              # Second softer glow ring
+              glow2 = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+              g2 = ImageDraw.Draw(glow2)
+              m2 = size // 7
+              g2.ellipse([m2, m2, size - m2, size - m2], outline=(0, 255, 255, 160), width=max(2, size // 28))
+              glow2 = glow2.filter(ImageFilter.GaussianBlur(radius=max(2, size // 18)))
+              img = Image.alpha_composite(img, glow2)
               draw = ImageDraw.Draw(img)
-              m2 = size // 6
-              draw.ellipse([m2, m2, size - m2, size - m2], outline=(0, 255, 255, 220), width=max(2, size // 32))
+              # Sharp neon ring
+              m3 = size // 6
+              draw.ellipse([m3, m3, size - m3, size - m3], outline=(0, 255, 255, 240), width=max(2, size // 30))
+              # T letter (bar + stem) with bright neon
               cx, cy = size // 2, size // 2
-              bar_h = max(3, size // 12)
+              bar_h = max(3, size // 11)
               bar_w = size // 2
-              stem_w = max(3, size // 10)
+              stem_w = max(3, size // 9)
               stem_h = size // 2
               x0 = cx - bar_w // 2
               y0 = cy - stem_h // 2
-              draw.rounded_rectangle([x0, y0, x0 + bar_w, y0 + bar_h], radius=bar_h // 2, fill=(0, 255, 255, 255))
               x1 = cx - stem_w // 2
-              y1 = y0
-              draw.rounded_rectangle([x1, y1, x1 + stem_w, y1 + stem_h], radius=stem_w // 2, fill=(0, 255, 255, 255))
-              letter = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-              ld = ImageDraw.Draw(letter)
-              ld.rounded_rectangle([x0, y0, x0 + bar_w, y0 + bar_h], radius=bar_h // 2, fill=(0, 255, 255, 180))
-              ld.rounded_rectangle([x1, y1, x1 + stem_w, y1 + stem_h], radius=stem_w // 2, fill=(0, 255, 255, 180))
-              letter = letter.filter(ImageFilter.GaussianBlur(radius=max(2, size // 20)))
-              img = Image.alpha_composite(img, letter)
+              # Soft glow under T
+              letter_glow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+              ldg = ImageDraw.Draw(letter_glow)
+              ldg.rounded_rectangle([x0-2, y0-2, x0 + bar_w+2, y0 + bar_h+2], radius=bar_h // 2, fill=(0, 255, 255, 140))
+              ldg.rounded_rectangle([x1-2, y0-2, x1 + stem_w+2, y0 + stem_h+2], radius=stem_w // 2, fill=(0, 255, 255, 140))
+              letter_glow = letter_glow.filter(ImageFilter.GaussianBlur(radius=max(2, size // 16)))
+              img = Image.alpha_composite(img, letter_glow)
+              draw = ImageDraw.Draw(img)
+              draw.rounded_rectangle([x0, y0, x0 + bar_w, y0 + bar_h], radius=bar_h // 2, fill=(0, 255, 255, 255))
+              draw.rounded_rectangle([x1, y0, x1 + stem_w, y0 + stem_h], radius=stem_w // 2, fill=(0, 255, 255, 255))
               return img
 
           base = Path("app/src/main/res")
@@ -178,7 +211,7 @@ jobs:
               d = base / f"mipmap-{dens}"
               d.mkdir(parents=True, exist_ok=True)
               neon_icon(size).save(d / "ic_launcher.png")
-          print("neon icons ok")
+          print("neon icons ok (bright glow)")
           PY
 
       - name: Gradle wrapper 8.7
@@ -197,7 +230,7 @@ jobs:
           set -o pipefail
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           ./gradlew clean assembleDebug --stacktrace --no-daemon 2>&1 | tee /tmp/gradle-build.log
-          tail -n 50 /tmp/gradle-build.log || true
+          tail -n 80 /tmp/gradle-build.log || true
 
       - name: Prepare dist APK
         if: success()
@@ -228,7 +261,7 @@ jobs:
           body: |
             TITAN PRO GOV v2.1.1 NEON STUDIO — APK کامل
             - سورس کامل ماژولار داخل APK (Neon Studio + Governor + Core + Learning + Paper)
-            - آیکون نئونی جدید
+            - آیکون نئونی درخشان جدید
             - UI مدرن + همه تب‌ها و نمودارها + استودیو
             - داده در Internal Storage/XXX
             نصب: Uninstall قبلی، نصب این APK، مجوز All files، ۱–۲ دقیقه صبر.
