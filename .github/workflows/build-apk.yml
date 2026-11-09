@@ -164,9 +164,9 @@ jobs:
               subprocess.check_call([sys.executable, "-m", "pip", "install", "pillow", "-q"])
               from PIL import Image, ImageDraw, ImageFilter
 
-          def neon_icon(size: int) -> Image.Image:
-              # Dark deep background
-              img = Image.new("RGBA", (size, size), (6, 8, 16, 255))
+          def neon_icon(size: int, transparent_bg: bool = False) -> Image.Image:
+              bg = (0, 0, 0, 0) if transparent_bg else (6, 8, 16, 255)
+              img = Image.new("RGBA", (size, size), bg)
               # Strong outer glow
               glow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
               gdraw = ImageDraw.Draw(glow)
@@ -185,7 +185,7 @@ jobs:
               # Sharp neon ring
               m3 = size // 6
               draw.ellipse([m3, m3, size - m3, size - m3], outline=(0, 255, 255, 240), width=max(2, size // 30))
-              # T letter (bar + stem) with bright neon
+              # T letter (bar + stem)
               cx, cy = size // 2, size // 2
               bar_h = max(3, size // 11)
               bar_w = size // 2
@@ -194,7 +194,6 @@ jobs:
               x0 = cx - bar_w // 2
               y0 = cy - stem_h // 2
               x1 = cx - stem_w // 2
-              # Soft glow under T
               letter_glow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
               ldg = ImageDraw.Draw(letter_glow)
               ldg.rounded_rectangle([x0-2, y0-2, x0 + bar_w+2, y0 + bar_h+2], radius=bar_h // 2, fill=(0, 255, 255, 140))
@@ -210,8 +209,15 @@ jobs:
           for dens, size in [("mdpi", 48), ("hdpi", 72), ("xhdpi", 96), ("xxhdpi", 144), ("xxxhdpi", 192)]:
               d = base / f"mipmap-{dens}"
               d.mkdir(parents=True, exist_ok=True)
-              neon_icon(size).save(d / "ic_launcher.png")
-          print("neon icons ok (bright glow)")
+              # full icon with dark bg (legacy)
+              neon_icon(size, transparent_bg=False).save(d / "ic_launcher.png")
+              # foreground for adaptive icon (transparent bg)
+              neon_icon(size, transparent_bg=True).save(d / "ic_launcher_foreground.png")
+          # also copy anydpi adaptive already in repo points to foreground
+          print("neon icons ok: ic_launcher + ic_launcher_foreground")
+          for dens in ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"]:
+              p = base / f"mipmap-{dens}" / "ic_launcher_foreground.png"
+              print(" ", p, p.exists(), p.stat().st_size if p.exists() else 0)
           PY
 
       - name: Gradle wrapper 8.7
@@ -261,7 +267,7 @@ jobs:
           body: |
             TITAN PRO GOV v2.1.1 NEON STUDIO — APK کامل
             - سورس کامل ماژولار داخل APK (Neon Studio + Governor + Core + Learning + Paper)
-            - آیکون نئونی درخشان جدید
+            - آیکون نئونی درخشان جدید (T درخشان فیروزه‌ای)
             - UI مدرن + همه تب‌ها و نمودارها + استودیو
             - داده در Internal Storage/XXX
             نصب: Uninstall قبلی، نصب این APK، مجوز All files، ۱–۲ دقیقه صبر.
