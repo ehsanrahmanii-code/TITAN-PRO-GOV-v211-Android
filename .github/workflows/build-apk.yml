@@ -18,54 +18,57 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Unpack full TITAN PRO GOV source from ZIP
+      - name: Prepare TITAN PRO GOV source
         run: |
           set -e
-          ZIP=""
-          for c in TITAN_PRO_GOV_v2_1_1_NEON_STUDIO.zip TITAN_PRO_GOV*.zip TITAN_PRO*.zip titan*.zip; do
-            if [ -f "$c" ] && [ "$(wc -c < "$c")" -gt 50000 ]; then ZIP="$c"; break; fi
-          done
-          if [ -z "$ZIP" ]; then
-            for c in *.zip; do
-              [ -f "$c" ] || continue
-              if [ "$(wc -c < "$c")" -gt 50000 ]; then ZIP="$c"; break; fi
-            done
-          fi
-          test -n "$ZIP"
-          echo "Using ZIP: $ZIP ($(wc -c < "$ZIP") bytes)"
-
-          rm -rf /tmp/titan_src
-          mkdir -p /tmp/titan_src
-          unzip -oq "$ZIP" -d /tmp/titan_src
-
-          ROOT=""
-          if [ -d /tmp/titan_src/titan/app ]; then
-            ROOT=/tmp/titan_src/titan
-          elif [ -d /tmp/titan_src/app ]; then
-            ROOT=/tmp/titan_src
-          else
-            ROOT=$(find /tmp/titan_src -type d -name app | head -1 | xargs -r dirname)
-          fi
-          test -n "$ROOT"
-          test -d "$ROOT/app"
-          echo "ROOT=$ROOT"
-          ls -la "$ROOT"
-
           DEST="app/src/main/python"
           mkdir -p "$DEST"
 
-          if [ -f "$DEST/android_main.py" ]; then
-            cp -f "$DEST/android_main.py" /tmp/android_main.py.bak
-          fi
+          if [ -f "$DEST/app/web/app.py" ] && [ -f "$DEST/app/web/static/css/titan.css" ] && [ -f "$DEST/android_main.py" ]; then
+            echo "Source already present in repo — skipping ZIP unpack"
+          else
+            ZIP=""
+            for c in TITAN_PRO_GOV_v2_1_1_NEON_STUDIO.zip TITAN_SOURCE.zip TITAN_PRO_GOV*.zip TITAN_PRO*.zip titan*.zip; do
+              if [ -f "$c" ] && [ "$(wc -c < "$c")" -gt 50000 ]; then ZIP="$c"; break; fi
+            done
+            if [ -z "$ZIP" ]; then
+              for c in *.zip; do
+                [ -f "$c" ] || continue
+                if [ "$(wc -c < "$c")" -gt 50000 ]; then ZIP="$c"; break; fi
+              done
+            fi
+            test -n "$ZIP" || { echo "No source and no ZIP found"; exit 1; }
+            echo "Using ZIP: $ZIP ($(wc -c < "$ZIP") bytes)"
 
-          rm -rf "$DEST/app" "$DEST/secret" "$DEST/run.py" "$DEST/requirements.txt" "$DEST/YYY" "$DEST/XXX" || true
-          cp -a "$ROOT/app" "$DEST/"
-          [ -d "$ROOT/secret" ] && cp -a "$ROOT/secret" "$DEST/" || mkdir -p "$DEST/secret"
-          [ -f "$ROOT/run.py" ] && cp -f "$ROOT/run.py" "$DEST/"
-          [ -f "$ROOT/requirements.txt" ] && cp -f "$ROOT/requirements.txt" "$DEST/"
+            rm -rf /tmp/titan_src
+            mkdir -p /tmp/titan_src
+            unzip -oq "$ZIP" -d /tmp/titan_src
 
-          if [ -f /tmp/android_main.py.bak ]; then
-            cp -f /tmp/android_main.py.bak "$DEST/android_main.py"
+            ROOT=""
+            if [ -d /tmp/titan_src/titan/app ]; then
+              ROOT=/tmp/titan_src/titan
+            elif [ -d /tmp/titan_src/app ]; then
+              ROOT=/tmp/titan_src
+            else
+              ROOT=$(find /tmp/titan_src -type d -name app | head -1 | xargs -r dirname)
+            fi
+            test -n "$ROOT"
+            test -d "$ROOT/app"
+            echo "ROOT=$ROOT"
+
+            if [ -f "$DEST/android_main.py" ]; then
+              cp -f "$DEST/android_main.py" /tmp/android_main.py.bak
+            fi
+
+            rm -rf "$DEST/app" "$DEST/secret" "$DEST/run.py" "$DEST/requirements.txt" "$DEST/YYY" "$DEST/XXX" || true
+            cp -a "$ROOT/app" "$DEST/"
+            [ -d "$ROOT/secret" ] && cp -a "$ROOT/secret" "$DEST/" || mkdir -p "$DEST/secret"
+            [ -f "$ROOT/run.py" ] && cp -f "$ROOT/run.py" "$DEST/"
+            [ -f "$ROOT/requirements.txt" ] && cp -f "$ROOT/requirements.txt" "$DEST/"
+
+            if [ -f /tmp/android_main.py.bak ]; then
+              cp -f /tmp/android_main.py.bak "$DEST/android_main.py"
+            fi
           fi
 
           python3 << 'PY'
